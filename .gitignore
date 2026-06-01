@@ -10,5 +10,6 @@ __pycache__/
 
 # Local owner-only keys must not be committed.
 keys/*.txt
+!keys/owner-age-recipient.txt
 !keys/owner-age-recipient.example.txt
 !keys/README.md
