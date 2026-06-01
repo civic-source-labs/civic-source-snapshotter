@@ -1,0 +1,86 @@
+# Navii Detail Collector Contract
+
+public repo側で実装するcollectorのCLI contractです。
+
+このscaffoldでは実collector codeをまだ置きません。既存private repoのsource-agnosticなfetch / parse / metrics部分だけを後続PRで移します。
+
+## CLI
+
+```bash
+python3 collectors/navii_detail/collect.py \
+  --source-dir "$SOURCE_DIR" \
+  --out-dir "$OUT_DIR" \
+  --source-id navii_detail \
+  --source-snapshot-date 2025-12-01 \
+  --run-label collector-navii-detail-20251201-canary \
+  --artifact-mode summary_only \
+  --kinds hospital,clinic,dental,pharmacy \
+  --shard-count 1 \
+  --shard-index 0 \
+  --max-pages-per-shard 400 \
+  --workers 2 \
+  --pause-seconds 0.3 \
+  --jitter-seconds 0.1 \
+  --timeout-seconds 30 \
+  --retry-count 2 \
+  --retry-backoff-seconds 2 \
+  --fail-on-fetch-error-rate 5 \
+  --execute
+```
+
+## Inputs
+
+- official open data ZIPs under `--source-dir`
+- source manifest under `sources/navii/source-manifest.json`
+- manual workflow inputs
+
+The collector must not require:
+
+- downstream DB
+- payment provider
+- deploy provider
+- downstream DB candidate CSV
+- service role
+- production secret
+
+## Outputs
+
+`--out-dir` should contain:
+
+```text
+candidates.csv.gz
+summary.csv.gz
+page-coverage.csv.gz
+table-rows.csv.gz
+coverage-summary.csv.gz
+run-metrics.json
+```
+
+`run-metrics.json` must include:
+
+- `schema_version`
+- `source_id`
+- `source_snapshot_date`
+- `run_label`
+- `shard_count`
+- `shard_index`
+- `candidate_count`
+- `fetch_ok_count`
+- `fetch_error_count`
+- `fetch_error_rate`
+- `started_at`
+- `completed_at`
+
+## Public Safety
+
+The collector may write facility-level rows to local shard artifact files, but the workflow must encrypt full artifacts before long-lived public artifact retention.
+
+`summary_only` modeでは、workflowへuploadされるshard packageにraw facility-level full outputを含めません。`encrypted_full` modeでも、raw outputはshard job内で暗号化してからuploadします。
+
+The collector must not write:
+
+- downstream DB ids
+- downstream match confidence
+- owner review notes
+- downstream DB load SQL
+- secret / token values

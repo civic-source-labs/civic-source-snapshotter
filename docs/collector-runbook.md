@@ -1,0 +1,126 @@
+# Collector Runbook
+
+`civic-source-snapshotter` public repoでナビィdetail source snapshotを取得するための初期runbookです。
+
+このrunbookはpublic collector側だけを扱います。downstream DB candidate出力、match inventory、product config / CSV反映、owner loadは扱いません。
+
+## 初回セットアップ
+
+1. ownerがpublic repo `civic-source-labs/civic-source-snapshotter` を作成する
+2. このscaffold directory配下をrepo rootへ転記する
+3. 初回empty repo bootstrapだけはowner承認のうえで `main` へ直接pushする
+4. `keys/owner-age-recipient.example.txt` を `keys/owner-age-recipient.txt` に置き換える
+5. `sources/navii/source-manifest.json` のsource snapshot dateとURLを確認する
+6. collector実装 `collectors/navii_detail/collect.py` を追加する
+
+private keyはpublic repoへ置きません。GitHub secretにも登録しません。
+
+`collectors/navii_detail/collect.py` が存在しない状態では、このworkflowはcanary実行できません。scaffold転記とcanary成功を混同しないでください。
+
+## Canary 1: summary only
+
+目的は、public repo側のworkflow、source manifest、shard matrix、summary artifactが動くかだけを確認することです。
+
+推奨input:
+
+| input | value |
+| --- | --- |
+| `execute` | `false` |
+| `confirm` | 空 |
+| `source_snapshot_date` | `2025-12-01` |
+| `run_label` | `collector-navii-detail-20251201-canary` |
+| `artifact_mode` | `summary_only` |
+| `shard_count` | `1` |
+| `max_parallel` | `1` |
+| `max_pages_per_shard` | `400` |
+
+確認:
+
+- workflowがmanual dispatchでだけ起動する
+- source ZIPをdownloadできる
+- `collector-run-manifest.json` が作られる
+- `SHA256SUMS` が作られる
+- workflow logにraw HTMLや施設単位full dataが出ていない
+- `encrypted/README.txt` 以外のraw full artifactが平文でuploadされていない
+
+## Canary 2: encrypted full
+
+目的は、full artifactを暗号化し、owner localで復号できることを確認することです。
+
+推奨input:
+
+| input | value |
+| --- | --- |
+| `execute` | `true` |
+| `confirm` | `owner-approved-public-source-snapshot` |
+| `artifact_mode` | `encrypted_full` |
+| `shard_count` | `1` |
+| `max_parallel` | `1` |
+| `workers` | `2` |
+| `pause_seconds` | `0.3` |
+| `jitter_seconds` | `0.1` |
+| `max_pages_per_shard` | `400` |
+
+確認:
+
+- `encrypted/raw-artifacts-shard-*.tar.zst.age` がある
+- `SHA256SUMS` とartifactが一致する
+- owner localで復号できる
+- 復号済みartifactのrow countがmanifest / metricsと一致する
+- private normalizer intakeに渡せる
+- 暗号化前の `*.tar.zst` やraw CSV / JSONL / HTMLがGitHub artifactへ残っていない
+
+## Full run
+
+full runはcanaryが成功してからowner判断で行います。
+
+推奨input:
+
+| input | value |
+| --- | --- |
+| `artifact_mode` | `encrypted_full` |
+| `shard_count` | `32` |
+| `max_parallel` | `32` |
+| `workers` | `2` |
+| `pause_seconds` | `0.3` |
+| `jitter_seconds` | `0.1` |
+| `max_pages_per_shard` | `0` |
+
+実行前確認:
+
+- GitHub Actions minutesの見込み
+- source側負荷
+- encrypted artifact retention
+- owner local decrypt作業時間
+- private normalizer intake path
+
+## Handoff
+
+private側へ渡す最小package:
+
+- `manifest/source-snapshot-manifest.json`
+- `manifest/collector-run-manifest.json`
+- `metrics/fetch-metrics.json`
+- `metrics/shard-summary.json`
+- `metrics/coverage-summary.csv`
+- `checksums/SHA256SUMS`
+- `encrypted/raw-artifacts-shard-*.tar.zst.age`
+- GitHub run URL
+
+private側へ渡さないもの:
+
+- GitHub token
+- owner private key
+- downstream DB candidate CSV
+- downstream match result
+- downstream DB load SQL
+- production secret
+
+## Stop Conditions
+
+- source manifestのURLが404 / 内容不一致
+- `fetch_error_rate` がowner許容値を超える
+- encrypted artifactが復号できない
+- checksum不一致
+- workflow logへraw full dataが出ている
+- private normalizer intakeがmanifestを読めない
