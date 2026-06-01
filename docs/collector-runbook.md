@@ -97,6 +97,7 @@ MHLW monthlyは、まずcanary manifestの一部だけでdry-runします。
 | `run_label` | `collector-mhlw-monthly-202604-canary` |
 | `artifact_mode` | `summary_only` |
 | `max_sources` | `1` |
+| `insecure_skip_tls_verify` | `false` |
 
 確認:
 
@@ -107,6 +108,7 @@ MHLW monthlyは、まずcanary manifestの一部だけでdry-runします。
 - summary_onlyでraw ZIP/XLSXがuploadされていない
 
 MHLW monthlyでraw source fileを取得する場合は、`execute=true`、`confirm=owner-approved-public-source-snapshot`、`artifact_mode=encrypted_full` にします。
+厚労省側のTLS chain問題でsummary canaryが証明書検証のみ失敗する場合だけ、owner判断で `insecure_skip_tls_verify=true` を使います。
 
 ## Full run
 
