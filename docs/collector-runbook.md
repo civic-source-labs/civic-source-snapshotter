@@ -6,16 +6,22 @@
 
 ## 初回セットアップ
 
-1. ownerがpublic repo `civic-source-labs/civic-source-snapshotter` を作成する
-2. このscaffold directory配下をrepo rootへ転記する
-3. 初回empty repo bootstrapだけはowner承認のうえで `main` へ直接pushする
-4. `keys/owner-age-recipient.example.txt` を `keys/owner-age-recipient.txt` に置き換える
-5. `sources/navii/source-manifest.json` のsource snapshot dateとURLを確認する
-6. collector実装 `collectors/navii_detail/collect.py` を追加する
+完了済み:
+
+- ownerがpublic repo `civic-source-labs/civic-source-snapshotter` を作成する
+- scaffoldをrepo rootへ転記し、初回empty repo bootstrapを `main` へpushする
+- collector実装 `collectors/navii_detail/collect.py` を追加する
+
+未完了:
+
+1. `sources/navii/source-manifest.json` のsource snapshot dateとURLを確認する
+2. `summary_only` canaryを実行する
+3. `keys/owner-age-recipient.example.txt` を `keys/owner-age-recipient.txt` に置き換える
+4. `encrypted_full` canaryを実行する
 
 private keyはpublic repoへ置きません。GitHub secretにも登録しません。
 
-`collectors/navii_detail/collect.py` が存在しない状態では、このworkflowはcanary実行できません。scaffold転記とcanary成功を混同しないでください。
+collector実装追加とcanary成功は別です。canary結果を確認するまでは、取得導線が本番運用可能とは扱いません。
 
 ## Canary 1: summary only
 
