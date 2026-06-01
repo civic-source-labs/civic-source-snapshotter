@@ -4,7 +4,7 @@
 
 public repoのartifactは第三者に見られる前提で扱います。summary / metricsは平文でよい一方、施設単位のfull artifactは暗号化します。
 
-## Package Layout
+## Navii Detail Package Layout
 
 ```text
 run-{source_id}-{source_snapshot_date}-{run_label}/
@@ -99,6 +99,35 @@ raw-artifacts/
 ```
 
 shard job間の中間artifactもpublic repo上では見える前提になるため、`encrypted_full` ではshardごとに暗号化したartifactだけをuploadします。未暗号化のraw shard directoryはpackage artifactへ含めません。
+
+## MHLW Monthly Package Layout
+
+厚労省月次source取得では、raw source fileをparseせず、download pathとchecksumだけを渡します。
+
+```text
+manifest/
+  source-snapshot-manifest.json
+  collector-run-manifest.json
+metrics/
+  fetch-metrics.json
+  mhlw-source-file-inventory.csv
+  source-coverage-summary.csv
+checksums/
+  SHA256SUMS
+encrypted/
+  raw-mhlw-source-files.tar.zst.age
+```
+
+暗号化前のfull artifactは次の形です。
+
+```text
+raw-files/
+  近畿/
+    届出受理/
+      kinki-medical-todokede.zip
+```
+
+`summary_only` では `raw-files/` はuploadしません。
 
 ## Public Log Boundary
 

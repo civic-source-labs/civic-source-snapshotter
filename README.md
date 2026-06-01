@@ -41,6 +41,7 @@ civic-source-snapshotter/
   .github/
     workflows/
       navii-detail-snapshot.yml
+      mhlw-monthly-source-snapshot.yml
   docs/
     artifact-schema.md
     collector-runbook.md
@@ -51,8 +52,14 @@ civic-source-snapshotter/
     navii/
       source-manifest.json
       README.md
+    mhlw_monthly/
+      source-manifest.json
+      README.md
   collectors/
     navii_detail/
+      README.md
+      collect.py
+    mhlw_monthly/
       README.md
       collect.py
 ```
@@ -81,4 +88,6 @@ civic-source-snapshotter/
 - `docs/artifact-schema.md`
 - `docs/collector-runbook.md`
 - `collectors/navii_detail/README.md`
+- `collectors/mhlw_monthly/README.md`
 - `sources/navii/source-manifest.json`
+- `sources/mhlw_monthly/source-manifest.json`
