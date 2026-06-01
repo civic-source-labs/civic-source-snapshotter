@@ -79,6 +79,10 @@ on:
         type: string
         required: true
         default: "2"
+      insecure_skip_tls_verify:
+        description: "Owner-approved troubleshooting only: disable TLS verification"
+        type: boolean
+        default: false
       artifact_retention_days:
         description: "GitHub artifact retention days"
         type: string
@@ -148,6 +152,7 @@ jobs:
           TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
           RETRY_COUNT: ${{ inputs.retry_count }}
           RETRY_BACKOFF_SECONDS: ${{ inputs.retry_backoff_seconds }}
+          INSECURE_SKIP_TLS_VERIFY: ${{ inputs.insecure_skip_tls_verify }}
           CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
@@ -171,6 +176,9 @@ jobs:
           )
           if [ "$EXECUTE" = "true" ]; then
             args+=(--execute)
+          fi
+          if [ "$INSECURE_SKIP_TLS_VERIFY" = "true" ]; then
+            args+=(--insecure-skip-tls-verify)
           fi
           python3 collectors/mhlw_monthly/collect.py "${args[@]}"
 

@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import sys
 import tempfile
 import time
@@ -89,6 +90,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--retry-count", type=int, default=2)
     parser.add_argument("--retry-backoff-seconds", type=float, default=2.0)
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT)
+    parser.add_argument(
+        "--insecure-skip-tls-verify",
+        action="store_true",
+        help="Disable TLS verification for owner-approved troubleshooting only.",
+    )
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args()
 
@@ -324,12 +330,13 @@ def download_file(url: str, dest: Path, *, args: argparse.Namespace) -> None:
 
 def request_bytes(url: str, *, args: argparse.Namespace) -> bytes:
     last_error: Exception | None = None
+    context = ssl._create_unverified_context() if args.insecure_skip_tls_verify else None
     for attempt in range(args.retry_count + 1):
         try:
             request = urllib.request.Request(url, headers={"User-Agent": args.user_agent})
-            with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=args.timeout_seconds, context=context) as response:
                 return response.read()
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (urllib.error.URLError, TimeoutError, ssl.SSLError) as exc:
             last_error = exc
             if attempt >= args.retry_count:
                 break
@@ -538,6 +545,7 @@ def run_self_test() -> int:
             retry_count=0,
             retry_backoff_seconds=0,
             user_agent=DEFAULT_USER_AGENT,
+            insecure_skip_tls_verify=False,
             self_test=False,
         )
         manifest_loaded = load_manifest(args.manifest)
