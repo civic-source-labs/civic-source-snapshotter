@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "source_id": "mhlw_monthly",
+  "source_name": "mhlw-regional-monthly-source-files",
+  "source_snapshot_date": "2026-04-01",
+  "source_terms_url": "https://www.mhlw.go.jp/",
+  "manifest_mode": "canary",
+  "source_urls": [
+    {
+      "source_key": "kinki-medical-todokede-canary",
+      "pipeline_slug": "medical",
+      "region": "近畿",
+      "source_label": "届出受理_医科",
+      "source_type": "todokede",
+      "fetch_type": "xpath",
+      "page_url": "https://kouseikyoku.mhlw.go.jp/kinki/gyomu/gyomu/hoken_kikan/shitei_jokyo_00004.html",
+      "xpath": "//a[contains(@href, \"sisetukijun_ika\") and contains(@href, \".zip\")]",
+      "download_subdir": "近畿/届出受理",
+      "expected_filename": "kinki-medical-todokede.zip",
+      "notes": "Canary row only. Full manifest is generated from GasoLead pipeline_sources by owner review."
+    },
+    {
+      "source_key": "kinki-dental-todokede-canary",
+      "pipeline_slug": "dental",
+      "region": "近畿",
+      "source_label": "届出受理_歯科",
+      "source_type": "todokede",
+      "fetch_type": "xpath",
+      "page_url": "https://kouseikyoku.mhlw.go.jp/kinki/gyomu/gyomu/hoken_kikan/shitei_jokyo_00004.html",
+      "xpath": "//a[contains(@href, \"sisetukijun_sika\") and contains(@href, \".zip\")]",
+      "download_subdir": "近畿/届出受理",
+      "expected_filename": "kinki-dental-todokede.zip",
+      "notes": "Canary row only. Full manifest is generated from GasoLead pipeline_sources by owner review."
+    },
+    {
+      "source_key": "kinki-pharmacy-todokede-canary",
+      "pipeline_slug": "pharmacy",
+      "region": "近畿",
+      "source_label": "届出受理_薬局",
+      "source_type": "todokede",
+      "fetch_type": "xpath",
+      "page_url": "https://kouseikyoku.mhlw.go.jp/kinki/gyomu/gyomu/hoken_kikan/shitei_jokyo_00004.html",
+      "xpath": "//a[contains(@href, \"sisetukijun_yakkyoku\") and contains(@href, \".zip\")]",
+      "download_subdir": "近畿/届出受理",
+      "expected_filename": "kinki-pharmacy-todokede.zip",
+      "notes": "Canary row only. Full manifest is generated from GasoLead pipeline_sources by owner review."
+    }
+  ],
+  "notes": [
+    "Public source URLs only.",
+    "Do not include downstream candidate CSV, match results, or load SQL.",
+    "This canary manifest intentionally contains only a tiny subset."
+  ]
+}

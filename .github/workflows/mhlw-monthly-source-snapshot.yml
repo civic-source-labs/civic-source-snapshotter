@@ -1,0 +1,213 @@
+name: "Source Snapshot: MHLW Monthly"
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Download resolved MHLW source files"
+        type: boolean
+        default: false
+      confirm:
+        description: "execute時は owner-approved-public-source-snapshot を入力"
+        type: string
+        required: false
+        default: ""
+      source_snapshot_date:
+        description: "Official source snapshot date"
+        type: string
+        required: true
+        default: "2026-04-01"
+      run_label:
+        description: "Artifact label. Use collector-mhlw-monthly-YYYYMM-canary/full"
+        type: string
+        required: true
+        default: "collector-mhlw-monthly-202604-canary"
+      artifact_mode:
+        description: "summary_only or encrypted_full"
+        type: choice
+        options:
+          - summary_only
+          - encrypted_full
+        default: summary_only
+      source_manifest:
+        description: "Manifest path in repo"
+        type: string
+        required: true
+        default: "sources/mhlw_monthly/source-manifest.json"
+      pipeline_slug:
+        description: "Optional comma-separated filter: medical,dental,pharmacy"
+        type: string
+        required: false
+        default: ""
+      region:
+        description: "Optional comma-separated region filter"
+        type: string
+        required: false
+        default: ""
+      source_type:
+        description: "Optional comma-separated source type: todokede,code_content"
+        type: string
+        required: false
+        default: ""
+      max_sources:
+        description: "Limit selected source rows. 0 means no limit."
+        type: string
+        required: true
+        default: "1"
+      workers:
+        description: "Reserved bounded download workers"
+        type: string
+        required: true
+        default: "4"
+      pause_seconds:
+        description: "Pause between source resolutions/downloads"
+        type: string
+        required: true
+        default: "0.5"
+      timeout_seconds:
+        description: "HTTP timeout seconds"
+        type: string
+        required: true
+        default: "30"
+      retry_count:
+        description: "HTTP retry count"
+        type: string
+        required: true
+        default: "2"
+      retry_backoff_seconds:
+        description: "Retry backoff seconds"
+        type: string
+        required: true
+        default: "2"
+      artifact_retention_days:
+        description: "GitHub artifact retention days"
+        type: string
+        required: true
+        default: "7"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mhlw-monthly-source-snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: "Collect MHLW monthly source files"
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Validate owner gate
+        env:
+          EXECUTE: ${{ inputs.execute }}
+          CONFIRM: ${{ inputs.confirm }}
+          ARTIFACT_MODE: ${{ inputs.artifact_mode }}
+          MAX_SOURCES: ${{ inputs.max_sources }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+
+          execute = os.environ["EXECUTE"].lower() == "true"
+          confirm = os.environ.get("CONFIRM", "")
+          if execute and confirm != "owner-approved-public-source-snapshot":
+              raise SystemExit("execute=true requires confirm=owner-approved-public-source-snapshot")
+          if os.environ["ARTIFACT_MODE"] not in {"summary_only", "encrypted_full"}:
+              raise SystemExit("invalid artifact_mode")
+          if int(os.environ["MAX_SOURCES"]) < 0:
+              raise SystemExit("max_sources must be >= 0")
+          PY
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install XPath dependency
+        run: |
+          python3 -m pip install --disable-pip-version-check lxml
+
+      - name: Run collector
+        env:
+          OUT_DIR: ${{ runner.temp }}/mhlw-monthly-output
+          EXECUTE: ${{ inputs.execute }}
+          SOURCE_MANIFEST: ${{ inputs.source_manifest }}
+          SOURCE_SNAPSHOT_DATE: ${{ inputs.source_snapshot_date }}
+          RUN_LABEL: ${{ inputs.run_label }}
+          ARTIFACT_MODE: ${{ inputs.artifact_mode }}
+          PIPELINE_SLUG: ${{ inputs.pipeline_slug }}
+          REGION: ${{ inputs.region }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
+          MAX_SOURCES: ${{ inputs.max_sources }}
+          WORKERS: ${{ inputs.workers }}
+          PAUSE_SECONDS: ${{ inputs.pause_seconds }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+          RETRY_COUNT: ${{ inputs.retry_count }}
+          RETRY_BACKOFF_SECONDS: ${{ inputs.retry_backoff_seconds }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_DIR"
+          args=(
+            --manifest "$SOURCE_MANIFEST"
+            --out-dir "$OUT_DIR"
+            --source-snapshot-date "$SOURCE_SNAPSHOT_DATE"
+            --run-label "$RUN_LABEL"
+            --artifact-mode "$ARTIFACT_MODE"
+            --pipeline-slug "$PIPELINE_SLUG"
+            --region "$REGION"
+            --source-type "$SOURCE_TYPE"
+            --max-sources "$MAX_SOURCES"
+            --workers "$WORKERS"
+            --pause-seconds "$PAUSE_SECONDS"
+            --timeout-seconds "$TIMEOUT_SECONDS"
+            --retry-count "$RETRY_COUNT"
+            --retry-backoff-seconds "$RETRY_BACKOFF_SECONDS"
+            --confirm "$CONFIRM"
+          )
+          if [ "$EXECUTE" = "true" ]; then
+            args+=(--execute)
+          fi
+          python3 collectors/mhlw_monthly/collect.py "${args[@]}"
+
+      - name: Package artifact
+        env:
+          OUT_DIR: ${{ runner.temp }}/mhlw-monthly-output
+          PACKAGE_DIR: ${{ runner.temp }}/mhlw-monthly-package
+          ARTIFACT_MODE: ${{ inputs.artifact_mode }}
+        run: |
+          set -euo pipefail
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+          cp -R "$OUT_DIR"/manifest "$PACKAGE_DIR"/manifest
+          cp -R "$OUT_DIR"/metrics "$PACKAGE_DIR"/metrics
+          cp -R "$OUT_DIR"/checksums "$PACKAGE_DIR"/checksums
+          mkdir -p "$PACKAGE_DIR/encrypted"
+
+          if [ "$ARTIFACT_MODE" = "encrypted_full" ]; then
+            test -s keys/owner-age-recipient.txt
+            sudo apt-get update
+            sudo apt-get install -y age zstd
+            tar --zstd -cf "$PACKAGE_DIR/encrypted/raw-mhlw-source-files.tar.zst" \
+              -C "$OUT_DIR" raw-files
+            age -R keys/owner-age-recipient.txt \
+              -o "$PACKAGE_DIR/encrypted/raw-mhlw-source-files.tar.zst.age" \
+              "$PACKAGE_DIR/encrypted/raw-mhlw-source-files.tar.zst"
+            rm "$PACKAGE_DIR/encrypted/raw-mhlw-source-files.tar.zst"
+          else
+            echo "summary_only mode: raw source files were not uploaded" > "$PACKAGE_DIR/encrypted/README.txt"
+          fi
+
+          (cd "$PACKAGE_DIR" && find . -type f -not -path './checksums/SHA256SUMS' -print0 | sort -z | xargs -0 shasum -a 256 > checksums/SHA256SUMS)
+          find "$PACKAGE_DIR" -maxdepth 3 -type f -print | sort
+
+      - name: Upload handoff package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhlw-monthly-handoff-${{ inputs.run_label }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/mhlw-monthly-package/
+          retention-days: ${{ fromJSON(inputs.artifact_retention_days) }}
