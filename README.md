@@ -1,14 +1,12 @@
-# Civic Source Snapshotter Scaffold
+# Civic Source Snapshotter
 
-PR infra-f用のscaffoldです。`civic-source-snapshotter` public repoへ移す初期ファイル案です。
-
-PR infra-g時点で、ownerはpublic repo `civic-source-labs/civic-source-snapshotter` を作成済みです。このdirectoryは、次のrepo rootへ転記するtemplateとして扱います。
+公開sourceから取得したsnapshot artifactを作るpublic collector repoです。downstreamの商品DB、決済、deploy、owner loadとは分離します。
 
 ```text
 https://github.com/civic-source-labs/civic-source-snapshotter
 ```
 
-このdirectoryは **転記用template** です。このまま現在のrepo内でActionsを実行するためのものではありません。public repo作成、暗号鍵生成、GitHub secret登録、Actions実行、downstream DB writeはこのPRでは行いません。
+このrepoはpublicです。secret、downstream DB candidate、match result、load SQL、復号private keyは置きません。
 
 ## 目的
 
@@ -17,8 +15,9 @@ public collector repoは、公開sourceから取得し、後段のprivate normal
 扱うもの:
 
 - 公開source manifest
-- manual dispatch workflow template
+- manual dispatch workflow
 - fetch / shard / artifact packaging contract
+- source collector implementation
 - summary / metrics
 - checksum
 - encrypted full artifactの受け渡し形
@@ -33,7 +32,7 @@ public collector repoは、公開sourceから取得し、後段のprivate normal
 - DB password、service role、payment / email / deploy secret
 - 復号private key
 
-## 初期配置案
+## 構成
 
 ```text
 civic-source-snapshotter/
@@ -55,21 +54,16 @@ civic-source-snapshotter/
   collectors/
     navii_detail/
       README.md
+      collect.py
 ```
 
-このscaffoldには実際のcollector実装はまだ含めません。`collectors/navii_detail/README.md` に、public repo側で実装するCLI contractだけを固定します。
+## 実行の流れ
 
-## 移管時の使い方
-
-1. ownerが `civic-source-labs/civic-source-snapshotter` public repoを作成する
-2. このdirectory配下の中身をrepo rootへ転記する
-3. 初回empty repo bootstrapだけはowner承認のうえで `main` へ直接pushする
-4. `keys/owner-age-recipient.example.txt` を実際のage public recipient `keys/owner-age-recipient.txt` へ置き換える
-5. `source-manifest.json` のsnapshot date / URLをownerが確認する
-6. collector実装を追加する
-7. `summary_only` canaryを実行する
-8. `encrypted_full` canaryを実行し、owner localでdecrypt / checksum確認する
-9. private normalizer intakeで読めることを確認する
+1. `source-manifest.json` のsnapshot date / URLをownerが確認する
+2. `summary_only` canaryを実行する
+3. `keys/owner-age-recipient.example.txt` を実際のage public recipient `keys/owner-age-recipient.txt` へ置き換える
+4. `encrypted_full` canaryを実行し、owner localでdecrypt / checksum確認する
+5. private normalizer intakeで読めることを確認する
 
 ## 安全境界
 
@@ -84,7 +78,7 @@ civic-source-snapshotter/
 
 ## 関連docs
 
-- `docs/data/public-collector-repo-spec.md`
-- `docs/data/public-collector-bootstrap-runbook.md`
-- `docs/data/private-normalizer-load-gate-spec.md`
-- `docs/data/navii-workflow-migration-prep.md`
+- `docs/artifact-schema.md`
+- `docs/collector-runbook.md`
+- `collectors/navii_detail/README.md`
+- `sources/navii/source-manifest.json`

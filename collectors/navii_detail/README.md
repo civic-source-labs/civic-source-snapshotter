@@ -2,7 +2,7 @@
 
 public repo側で実装するcollectorのCLI contractです。
 
-このscaffoldでは実collector codeをまだ置きません。既存private repoのsource-agnosticなfetch / parse / metrics部分だけを後続PRで移します。
+`collect.py` は公式open data ZIPからdetail URL候補を作り、owner承認時だけdetail HTMLを取得するpublic-source collectorです。下流DB、決済、deploy provider、production secretには接続しません。
 
 ## CLI
 
