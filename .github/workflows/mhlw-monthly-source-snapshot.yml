@@ -1,6 +1,11 @@
 name: "Source Snapshot: MHLW Monthly"
 
 on:
+  schedule:
+    # 毎月5日 07:00 JST (4日 22:00 UTC) — GasoLead monthly pipelineの前にfull artifactを作る
+    - cron: "0 22 4 * *"
+    # 毎月8日 07:00 JST (7日 22:00 UTC) — 5日run失敗時のpublic artifact再生成
+    - cron: "0 22 7 * *"
   workflow_dispatch:
     inputs:
       execute:
@@ -102,12 +107,108 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Validate owner gate
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve effective inputs
+        id: config
         env:
+          EVENT_NAME: ${{ github.event_name }}
           EXECUTE: ${{ inputs.execute }}
           CONFIRM: ${{ inputs.confirm }}
+          SOURCE_MANIFEST: ${{ inputs.source_manifest }}
+          SOURCE_SNAPSHOT_DATE: ${{ inputs.source_snapshot_date }}
+          RUN_LABEL: ${{ inputs.run_label }}
           ARTIFACT_MODE: ${{ inputs.artifact_mode }}
+          PIPELINE_SLUG: ${{ inputs.pipeline_slug }}
+          REGION: ${{ inputs.region }}
+          SOURCE_TYPE: ${{ inputs.source_type }}
           MAX_SOURCES: ${{ inputs.max_sources }}
+          WORKERS: ${{ inputs.workers }}
+          PAUSE_SECONDS: ${{ inputs.pause_seconds }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+          RETRY_COUNT: ${{ inputs.retry_count }}
+          RETRY_BACKOFF_SECONDS: ${{ inputs.retry_backoff_seconds }}
+          INSECURE_SKIP_TLS_VERIFY: ${{ inputs.insecure_skip_tls_verify }}
+          ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact_retention_days }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          event_name = os.environ["EVENT_NAME"]
+          default_manifest = "sources/mhlw_monthly/source-manifest.json"
+
+          def emit(name: str, value: str) -> None:
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write(f"{name}={value}\n")
+
+          def value(name: str, default: str) -> str:
+              raw = os.environ.get(name, "")
+              return raw if raw not in {"", "None"} else default
+
+          if event_name == "schedule":
+              source_manifest = default_manifest
+              if not Path(source_manifest).exists():
+                  raise SystemExit(f"scheduled run requires source manifest: {source_manifest}")
+              jst_now = datetime.now(ZoneInfo("Asia/Tokyo"))
+              source_snapshot_date = f"{jst_now:%Y-%m}-01"
+              run_label = f"collector-mhlw-monthly-{source_snapshot_date[:7].replace('-', '')}-full"
+              resolved = {
+                  "execute": "true",
+                  "confirm": "owner-approved-public-source-snapshot",
+                  "source_manifest": source_manifest,
+                  "source_snapshot_date": source_snapshot_date,
+                  "run_label": run_label,
+                  "artifact_mode": "encrypted_full",
+                  "pipeline_slug": "",
+                  "region": "",
+                  "source_type": "",
+                  "max_sources": "0",
+                  "workers": "4",
+                  "pause_seconds": "0.5",
+                  "timeout_seconds": "30",
+                  "retry_count": "2",
+                  "retry_backoff_seconds": "2",
+                  "insecure_skip_tls_verify": "false",
+                  "artifact_retention_days": "7",
+              }
+          else:
+              resolved = {
+                  "execute": value("EXECUTE", "false").lower(),
+                  "confirm": value("CONFIRM", ""),
+                  "source_manifest": value("SOURCE_MANIFEST", default_manifest),
+                  "source_snapshot_date": value("SOURCE_SNAPSHOT_DATE", "2026-04-01"),
+                  "run_label": value("RUN_LABEL", "collector-mhlw-monthly-202604-canary"),
+                  "artifact_mode": value("ARTIFACT_MODE", "summary_only"),
+                  "pipeline_slug": value("PIPELINE_SLUG", ""),
+                  "region": value("REGION", ""),
+                  "source_type": value("SOURCE_TYPE", ""),
+                  "max_sources": value("MAX_SOURCES", "1"),
+                  "workers": value("WORKERS", "4"),
+                  "pause_seconds": value("PAUSE_SECONDS", "0.5"),
+                  "timeout_seconds": value("TIMEOUT_SECONDS", "30"),
+                  "retry_count": value("RETRY_COUNT", "2"),
+                  "retry_backoff_seconds": value("RETRY_BACKOFF_SECONDS", "2"),
+                  "insecure_skip_tls_verify": value("INSECURE_SKIP_TLS_VERIFY", "false").lower(),
+                  "artifact_retention_days": value("ARTIFACT_RETENTION_DAYS", "7"),
+              }
+
+          for key, resolved_value in resolved.items():
+              emit(key, str(resolved_value))
+          print(json.dumps(resolved, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Validate owner gate
+        env:
+          EXECUTE: ${{ steps.config.outputs.execute }}
+          CONFIRM: ${{ steps.config.outputs.confirm }}
+          ARTIFACT_MODE: ${{ steps.config.outputs.artifact_mode }}
+          MAX_SOURCES: ${{ steps.config.outputs.max_sources }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -123,9 +224,6 @@ jobs:
               raise SystemExit("max_sources must be >= 0")
           PY
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -138,22 +236,22 @@ jobs:
       - name: Run collector
         env:
           OUT_DIR: ${{ runner.temp }}/mhlw-monthly-output
-          EXECUTE: ${{ inputs.execute }}
-          SOURCE_MANIFEST: ${{ inputs.source_manifest }}
-          SOURCE_SNAPSHOT_DATE: ${{ inputs.source_snapshot_date }}
-          RUN_LABEL: ${{ inputs.run_label }}
-          ARTIFACT_MODE: ${{ inputs.artifact_mode }}
-          PIPELINE_SLUG: ${{ inputs.pipeline_slug }}
-          REGION: ${{ inputs.region }}
-          SOURCE_TYPE: ${{ inputs.source_type }}
-          MAX_SOURCES: ${{ inputs.max_sources }}
-          WORKERS: ${{ inputs.workers }}
-          PAUSE_SECONDS: ${{ inputs.pause_seconds }}
-          TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
-          RETRY_COUNT: ${{ inputs.retry_count }}
-          RETRY_BACKOFF_SECONDS: ${{ inputs.retry_backoff_seconds }}
-          INSECURE_SKIP_TLS_VERIFY: ${{ inputs.insecure_skip_tls_verify }}
-          CONFIRM: ${{ inputs.confirm }}
+          EXECUTE: ${{ steps.config.outputs.execute }}
+          SOURCE_MANIFEST: ${{ steps.config.outputs.source_manifest }}
+          SOURCE_SNAPSHOT_DATE: ${{ steps.config.outputs.source_snapshot_date }}
+          RUN_LABEL: ${{ steps.config.outputs.run_label }}
+          ARTIFACT_MODE: ${{ steps.config.outputs.artifact_mode }}
+          PIPELINE_SLUG: ${{ steps.config.outputs.pipeline_slug }}
+          REGION: ${{ steps.config.outputs.region }}
+          SOURCE_TYPE: ${{ steps.config.outputs.source_type }}
+          MAX_SOURCES: ${{ steps.config.outputs.max_sources }}
+          WORKERS: ${{ steps.config.outputs.workers }}
+          PAUSE_SECONDS: ${{ steps.config.outputs.pause_seconds }}
+          TIMEOUT_SECONDS: ${{ steps.config.outputs.timeout_seconds }}
+          RETRY_COUNT: ${{ steps.config.outputs.retry_count }}
+          RETRY_BACKOFF_SECONDS: ${{ steps.config.outputs.retry_backoff_seconds }}
+          INSECURE_SKIP_TLS_VERIFY: ${{ steps.config.outputs.insecure_skip_tls_verify }}
+          CONFIRM: ${{ steps.config.outputs.confirm }}
         run: |
           set -euo pipefail
           mkdir -p "$OUT_DIR"
@@ -186,7 +284,7 @@ jobs:
         env:
           OUT_DIR: ${{ runner.temp }}/mhlw-monthly-output
           PACKAGE_DIR: ${{ runner.temp }}/mhlw-monthly-package
-          ARTIFACT_MODE: ${{ inputs.artifact_mode }}
+          ARTIFACT_MODE: ${{ steps.config.outputs.artifact_mode }}
         run: |
           set -euo pipefail
           rm -rf "$PACKAGE_DIR"
@@ -216,6 +314,6 @@ jobs:
       - name: Upload handoff package
         uses: actions/upload-artifact@v4
         with:
-          name: mhlw-monthly-handoff-${{ inputs.run_label }}-${{ github.run_id }}
+          name: mhlw-monthly-handoff-${{ steps.config.outputs.run_label }}-${{ github.run_id }}
           path: ${{ runner.temp }}/mhlw-monthly-package/
-          retention-days: ${{ fromJSON(inputs.artifact_retention_days) }}
+          retention-days: ${{ fromJSON(steps.config.outputs.artifact_retention_days) }}

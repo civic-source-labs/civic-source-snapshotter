@@ -71,10 +71,13 @@ civic-source-snapshotter/
 3. `keys/owner-age-recipient.example.txt` を実際のage public recipient `keys/owner-age-recipient.txt` へ置き換える
 4. `encrypted_full` canaryを実行し、owner localでdecrypt / checksum確認する
 5. private normalizer intakeで読めることを確認する
+6. schedule化したcollectorが、downstream scheduleより前にencrypted full artifactを生成することを確認する
 
 ## 安全境界
 
-- public repoでは `workflow_dispatch` のみから始める
+- collectorはmanual canaryから始め、owner確認済みのものだけschedule化する
+- MHLW monthly collectorは、downstreamの月次pipeline前にencrypted full artifactを作るscheduleを持つ
+- Navii detail collectorは、全件取得負荷と商品化判断が残るためmanual実行のまま扱う
 - summary / metricsは平文でよいが、施設単位のfull artifactは暗号化する
 - private keyはowner localだけに置く
 - public repoのActionsからproduction DBへ接続しない
