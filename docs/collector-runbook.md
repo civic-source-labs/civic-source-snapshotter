@@ -11,6 +11,18 @@
 | Navii detail | `Source Snapshot: Navii Detail` | ナビィopen dataからdetail pageを取得し、人員・在宅/連携・予約/診療時間系tableを抽出する |
 | MHLW monthly | `Source Snapshot: MHLW Monthly` | 厚労省地方厚生局の月次source ZIP/XLSXを取得し、checksum付きraw source packageを作る |
 
+## Schedule policy
+
+MHLW monthly collectorは、GasoLead側の月次pipeline scheduleより前にencrypted full artifactを生成します。
+
+| workflow | schedule | effective config |
+| --- | --- | --- |
+| `Source Snapshot: MHLW Monthly` | 毎月5日 07:00 JST / 毎月8日 07:00 JST | `execute=true`、`artifact_mode=encrypted_full`、`max_sources=0`、`source_manifest=sources/mhlw_monthly/source-manifest.json` |
+
+schedule runでは、Asia/Tokyoの実行月から `YYYY-MM-01` の `source_snapshot_date` と `collector-mhlw-monthly-YYYYMM-full` のrun labelを自動生成します。GasoLead側は同日09:xx JSTに最新成功full artifactを解決して使うため、public repo側の5日runが失敗した場合は8日runで再生成します。
+
+Navii detail collectorは、全件取得負荷、利用判断、商品化判断が残るため、このrunbook時点ではmanual dispatchのまま扱います。
+
 ## 初回セットアップ
 
 完了済み:
@@ -110,21 +122,22 @@ MHLW monthlyは、まずcanary manifestの一部だけでdry-runします。
 MHLW monthlyでraw source fileを取得する場合は、`execute=true`、`confirm=owner-approved-public-source-snapshot`、`artifact_mode=encrypted_full` にします。
 厚労省側のTLS chain問題でsummary canaryが証明書検証のみ失敗する場合だけ、owner判断で `insecure_skip_tls_verify=true` を使います。
 
-## Full run
+## MHLW Monthly Full Run
 
-full runはcanaryが成功してからowner判断で行います。
+manual full runは、scheduleの補修、artifact再生成、manifest更新直後の確認に使います。canaryとowner local decrypt確認が済んでいない状態では実行しません。
 
 推奨input:
 
 | input | value |
 | --- | --- |
+| `execute` | `true` |
+| `confirm` | `owner-approved-public-source-snapshot` |
+| `source_snapshot_date` | 取得対象月の `YYYY-MM-01`。例: `2026-06-01` |
+| `run_label` | `collector-mhlw-monthly-YYYYMM-full` |
 | `artifact_mode` | `encrypted_full` |
-| `shard_count` | `32` |
-| `max_parallel` | `32` |
 | `workers` | `2` |
-| `pause_seconds` | `0.3` |
-| `jitter_seconds` | `0.1` |
-| `max_pages_per_shard` | `0` |
+| `pause_seconds` | `0.5` |
+| `max_sources` | `0` |
 
 実行前確認:
 
@@ -133,6 +146,19 @@ full runはcanaryが成功してからowner判断で行います。
 - encrypted artifact retention
 - owner local decrypt作業時間
 - private normalizer intake path
+
+schedule runの期待値:
+
+- `Resolve effective inputs` stepで `artifact_mode=encrypted_full`、`max_sources=0`、`run_label=collector-mhlw-monthly-YYYYMM-full` になっている
+- `Package artifact` stepで `encrypted/raw-mhlw-source-files.tar.zst.age` だけがupload packageへ入り、暗号化前の `*.tar.zst` は残らない
+- `Upload handoff package` のartifact名が `mhlw-monthly-handoff-collector-mhlw-monthly-YYYYMM-full-<github_run_id>` になる
+
+schedule失敗時の復旧:
+
+1. failure logで、source 404、TLS、checksum、age recipient、Actions timeoutのどれかを確認する
+2. source manifestの更新が必要ならPRで修正する
+3. manual full runを実行してencrypted full artifactを再生成する
+4. GasoLead側pipelineで `mhlw_public_artifact_run_id=latest` を使い、3業界fetch smokeを確認する
 
 ## Handoff
 

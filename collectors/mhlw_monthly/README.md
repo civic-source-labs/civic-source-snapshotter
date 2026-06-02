@@ -32,3 +32,12 @@ python3 collectors/mhlw_monthly/collect.py \
 ```
 
 `--execute` を付けない場合はresolved URLとmetricsだけを出し、raw file downloadは行いません。
+
+## GitHub Actions schedule
+
+`.github/workflows/mhlw-monthly-source-snapshot.yml` のschedule runは、manual canary後の通常運用として使います。
+
+- 毎月5日 07:00 JST: GasoLead monthly pipeline前のfull artifact生成
+- 毎月8日 07:00 JST: 5日run失敗時のpublic artifact再生成
+
+schedule runではAsia/Tokyoの実行月から `YYYY-MM-01` の `source_snapshot_date` を作り、`collector-mhlw-monthly-YYYYMM-full` のrun labelで `encrypted_full` artifactを作ります。
